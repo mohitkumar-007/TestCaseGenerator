@@ -1,0 +1,14 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - heading "Test Case Generator" [level=1] [ref=e5]
+      - paragraph [ref=e6]: Paste a PRD or user story → get structured, execution-ready test cases.
+  - main [ref=e7]:
+    - generic [ref=e9]:
+      - paragraph [ref=e11]: Happy to help you in Testcase generation
+      - generic [ref=e12]: TestPilot · 13:00
+    - generic [ref=e15]:
+      - button "Attach PRD file" [ref=e16] [cursor=pointer]: 📎
+      - textbox "I'm TestPilot — type your user story here" [ref=e17]
+      - button "Send message" [ref=e18] [cursor=pointer]: Send
+  - contentinfo [ref=e19]: "Target: http://localhost:7860"

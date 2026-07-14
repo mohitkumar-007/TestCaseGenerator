@@ -1,0 +1,53 @@
+- generic [ref=f1e2]:
+  - banner [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - button "Toggle conversation history" [ref=f1e5] [cursor=pointer]: ☰
+      - generic [ref=f1e6]:
+        - heading "Test Case Generator" [level=1] [ref=f1e7]
+        - paragraph [ref=f1e8]:
+          - text: Paste a PRD or user story → get structured, execution-ready test cases — powered by
+          - strong [ref=f1e9]: TestPilot
+          - text: .
+    - generic [ref=f1e10]:
+      - button "Copy all test cases" [disabled] [ref=f1e11]: 📋 Copy All
+      - button "Export to Excel" [disabled] [ref=f1e12]: 📄 Export
+      - button "Clear chat" [ref=f1e13] [cursor=pointer]: 🗑 Clear
+      - button "Toggle dark mode" [ref=f1e14] [cursor=pointer]: ☾
+  - generic [ref=f1e15]:
+    - complementary [ref=f1e16]:
+      - button "+ New Chat" [ref=f1e18] [cursor=pointer]
+      - navigation "Conversation history" [ref=f1e19]:
+        - paragraph [ref=f1e20]: No conversations yet.
+    - main [ref=f1e21]:
+      - generic [ref=f1e24]:
+        - generic [ref=f1e25]: 💬
+        - heading "TestPilot" [level=2] [ref=f1e26]
+        - paragraph [ref=f1e27]: Happy to help you in Testcase generation
+        - paragraph [ref=f1e28]: Try a sample story, or type your own below.
+        - generic [ref=f1e29]:
+          - button "Banking Fund Transfer" [ref=f1e30] [cursor=pointer]:
+            - generic [ref=f1e31]: 🏦
+            - generic [ref=f1e32]: Banking
+            - generic [ref=f1e33]: Fund Transfer
+          - button "Insurance Policy Claim Submission" [ref=f1e34] [cursor=pointer]:
+            - generic [ref=f1e35]: 🛡️
+            - generic [ref=f1e36]: Insurance
+            - generic [ref=f1e37]: Policy Claim Submission
+          - button "Finance Loan EMI Calculation" [ref=f1e38] [cursor=pointer]:
+            - generic [ref=f1e39]: 📊
+            - generic [ref=f1e40]: Finance
+            - generic [ref=f1e41]: Loan EMI Calculation
+      - generic [ref=f1e44]:
+        - textbox "I'm TestPilot — type your user story here" [ref=f1e45]
+        - generic [ref=f1e46]:
+          - generic [ref=f1e47]:
+            - button "Attach PRD file" [ref=f1e48] [cursor=pointer]:
+              - generic [ref=f1e49]: +
+              - generic [ref=f1e50]: File
+            - button "Select model" [ref=f1e52] [cursor=pointer]:
+              - generic [ref=f1e53]: ✦
+              - generic [ref=f1e54]: gemini-3-flash-preview
+              - generic [ref=f1e55]: ▾
+          - button "Send message" [ref=f1e56] [cursor=pointer]:
+            - generic [ref=f1e57]: ↑
+  - contentinfo [ref=f1e58]: "Target: http://localhost:7860 · Model: gemini-3-flash-preview"

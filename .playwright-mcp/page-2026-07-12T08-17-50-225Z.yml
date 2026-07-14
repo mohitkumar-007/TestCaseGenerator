@@ -1,0 +1,22 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - heading "Test Case Generator" [level=1] [ref=f2e5]
+      - paragraph [ref=f2e6]:
+        - text: Paste a PRD or user story → get structured, execution-ready test cases — powered by
+        - strong [ref=f2e7]: TestPilot
+        - text: .
+    - generic [ref=f2e8]:
+      - button "Copy all test cases" [disabled] [ref=f2e9]: 📋 Copy All
+      - button "Export to Excel" [disabled] [ref=f2e10]: 📄 Export
+      - button "Clear chat" [ref=f2e11] [cursor=pointer]: 🗑 Clear
+      - button "Toggle dark mode" [ref=f2e12] [cursor=pointer]: ☀
+  - main [ref=f2e13]:
+    - generic [ref=f2e41]:
+      - generic [ref=f2e42]: As a bank customer, I want to transfer funds between my linked accounts so that I can move money without visiting a branch. The transfer should validate available balance, daily limits, and require OTP confirmation before completing.
+      - generic [ref=f2e43]: 13:47
+    - generic [ref=f2e36]:
+      - button "Attach PRD file" [ref=f2e37] [cursor=pointer]: 📎
+      - textbox "I'm TestPilot — type your user story here" [ref=f2e38]
+      - button "Send message" [disabled] [ref=f2e39] [cursor=pointer]: Send
+  - contentinfo [ref=f2e40]: "Target: http://localhost:7860"

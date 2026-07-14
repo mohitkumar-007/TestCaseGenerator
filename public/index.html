@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Case Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="app-header-left">
+        <button id="btn-sidebar-toggle" class="icon-btn toolbar-btn sidebar-toggle-btn" type="button"
+                aria-label="Toggle conversation history" title="Toggle history">
+          &#9776;
+        </button>
+        <div class="app-header-text">
+          <h1 class="app-title">Test Case Generator</h1>
+          <p class="app-subtitle">
+            Paste a PRD or user story &rarr; get structured, execution-ready test cases
+            &mdash; powered by <strong id="assistant-name-header">TestPilot</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-copy-all" class="icon-btn toolbar-btn" type="button"
+                aria-label="Copy all test cases" title="Copy all test cases" disabled>
+          &#128203; Copy All
+        </button>
+        <button id="btn-export" class="icon-btn toolbar-btn" type="button"
+                aria-label="Export to Excel" title="Export test cases to Excel" disabled>
+          &#128196; Export
+        </button>
+        <button id="btn-clear" class="icon-btn toolbar-btn" type="button"
+                aria-label="Clear chat" title="Clear chat">
+          &#128465; Clear
+        </button>
+        <button id="btn-theme" class="icon-btn toolbar-btn theme-btn" type="button"
+                aria-label="Toggle dark mode" title="Toggle dark / light mode">
+          &#9790;
+        </button>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <!-- Left sidebar: conversation history -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <button id="btn-new-chat" class="new-chat-btn" type="button">
+            &#43; New Chat
+          </button>
+          <div class="sidebar-search-wrap">
+            <input id="sidebar-search" class="sidebar-search" type="search"
+              placeholder="Search chats…" autocomplete="off" />
+          </div>
+        </div>
+        <nav class="sidebar-list" id="sidebar-list" aria-label="Conversation history">
+          <!-- Populated by JS (Step 2) -->
+        </nav>
+      </aside>
+
+      <!-- Tap-to-close overlay (mobile only) -->
+      <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+
+      <main class="chat-panel" id="chat-panel">
+        <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
+
+        <form class="composer" id="composer">
+          <div class="composer-inner">
+            <!-- Jira connector panel -->
+            <div id="jira-panel" class="jira-panel" hidden>
+              <!-- fetch state -->
+              <div id="jira-fetch-view" class="jira-view">
+                <div class="jira-panel-header">
+                  <span class="jira-panel-title">&#128279; Jira Connector</span>
+                  <button type="button" class="jira-close-btn" id="jira-close-btn">&#10005; Close</button>
+                </div>
+                <div class="jira-fetch-row">
+                  <input type="text" id="jira-id-input" class="jira-id-input"
+                    placeholder="Enter Jira ID e.g. PROJ-1234" autocomplete="off" />
+                  <button type="button" id="jira-fetch-btn" class="jira-fetch-btn">Fetch</button>
+                </div>
+                <p class="jira-hint">Pulls Summary, Description &amp; Acceptance Criteria from the ticket to seed generation.</p>
+              </div>
+              <!-- imported state -->
+              <div id="jira-imported-view" class="jira-view" hidden>
+                <div class="jira-panel-header">
+                  <span class="jira-panel-title jira-imported-title">&#10003; Imported <strong id="jira-ticket-label"></strong></span>
+                  <div class="jira-header-actions">
+                    <button type="button" id="jira-change-btn" class="jira-text-btn">Change ticket</button>
+                    <button type="button" id="jira-close-btn-2" class="jira-close-btn">&#10005; Close</button>
+                  </div>
+                </div>
+                <div class="jira-field-group">
+                  <label class="jira-field-label" for="jira-summary">SUMMARY</label>
+                  <input type="text" id="jira-summary" class="jira-field-input" />
+                </div>
+                <div class="jira-field-group">
+                  <label class="jira-field-label" for="jira-description">DESCRIPTION</label>
+                  <textarea id="jira-description" class="jira-field-textarea" rows="3"></textarea>
+                </div>
+                <div class="jira-field-group">
+                  <label class="jira-field-label" for="jira-acceptance">ACCEPTANCE CRITERIA</label>
+                  <textarea id="jira-acceptance" class="jira-field-textarea" rows="4"></textarea>
+                </div>
+                <div class="jira-generate-row">
+                  <button type="button" id="jira-generate-btn" class="jira-generate-btn">Generate Test Cases &#8594;</button>
+                </div>
+              </div>
+            </div>
+            <div class="file-chip-row" id="file-chip-row"></div>
+            <div class="composer-pill">
+              <textarea
+                id="chat-input"
+                class="chat-input"
+                rows="1"
+                placeholder="I'm TestPilot — type your user story here"
+              ></textarea>
+              <div class="composer-tools-row">
+                <div class="composer-tools-left">
+                  <button type="button" class="composer-tool-btn" id="attach-btn"
+                          aria-label="Attach PRD file" title="Attach PDF">
+                    <span class="tool-icon-plus" aria-hidden="true">&#43;</span>
+                    <span>File</span>
+                  </button>
+                  <button type="button" class="composer-tool-btn" id="jira-btn"
+                          aria-label="Connect Jira ticket" title="Jira Connector">
+                    <span aria-hidden="true">&#128279;</span>
+                    <span>Jira</span>
+                  </button>
+                  <div class="model-selector">
+                    <button type="button" class="composer-tool-btn model-btn" id="model-btn"
+                            aria-haspopup="listbox" aria-expanded="false"
+                            aria-label="Select model" title="Select model">
+                      <span class="model-icon" aria-hidden="true">&#10022;</span>
+                      <span class="model-name" id="model-name">gemini-3-flash-preview</span>
+                      <span class="model-chevron" aria-hidden="true">&#9662;</span>
+                    </button>
+                    <div class="model-dropdown" id="model-dropdown" role="listbox" hidden></div>
+                  </div>
+                </div>
+                <button type="submit" class="send-btn" id="send-btn" aria-label="Send message" title="Send">
+                  <span aria-hidden="true">&#8593;</span>
+                </button>
+              </div>
+            </div>
+            <input type="file" id="file-input" accept=".pdf" hidden />
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <footer class="status-bar" id="status-bar"></footer>
+
+    <!-- Toast container for non-blocking error notifications -->
+    <div id="toast-container" class="toast-container" aria-live="assertive"></div>
+  </div>
+
+  <!-- SheetJS for Excel export (allowed per spec — ban only on Langflow chat CDN) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+- generic [ref=f1e2]:
+  - banner [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - heading "Test Case Generator" [level=1] [ref=f1e5]
+      - paragraph [ref=f1e6]:
+        - text: Paste a PRD or user story → get structured, execution-ready test cases — powered by
+        - strong [ref=f1e7]: TestPilot
+        - text: .
+    - generic [ref=f1e8]:
+      - button "Copy all test cases" [disabled] [ref=f1e9]: 📋 Copy All
+      - button "Export to Excel" [disabled] [ref=f1e10]: 📄 Export
+      - button "Clear chat" [ref=f1e11] [cursor=pointer]: 🗑 Clear
+      - button "Toggle dark mode" [active] [ref=f1e12] [cursor=pointer]: ☀
+  - main [ref=f1e13]:
+    - generic [ref=f1e16]:
+      - generic [ref=f1e17]: 💬
+      - heading "TestPilot" [level=2] [ref=f1e18]
+      - paragraph [ref=f1e19]: Happy to help you in Testcase generation
+      - paragraph [ref=f1e20]: Try a sample story, or type your own below.
+      - generic [ref=f1e21]:
+        - button "Banking Fund Transfer" [ref=f1e22] [cursor=pointer]:
+          - generic [ref=f1e23]: 🏦
+          - generic [ref=f1e24]: Banking
+          - generic [ref=f1e25]: Fund Transfer
+        - button "Insurance Policy Claim Submission" [ref=f1e26] [cursor=pointer]:
+          - generic [ref=f1e27]: 🛡️
+          - generic [ref=f1e28]: Insurance
+          - generic [ref=f1e29]: Policy Claim Submission
+        - button "Finance Loan EMI Calculation" [ref=f1e30] [cursor=pointer]:
+          - generic [ref=f1e31]: 📊
+          - generic [ref=f1e32]: Finance
+          - generic [ref=f1e33]: Loan EMI Calculation
+    - generic [ref=f1e36]:
+      - button "Attach PRD file" [ref=f1e37] [cursor=pointer]: 📎
+      - textbox "I'm TestPilot — type your user story here" [ref=f1e38]
+      - button "Send message" [ref=f1e39] [cursor=pointer]: Send
+  - contentinfo [ref=f1e40]: "Target: http://localhost:7860"
