@@ -292,7 +292,7 @@
     return node.id;
   }
 
-  // File mode step 1: upload the PDF and return the server-side path Langflow
+  // File mode step 1: upload the file (PDF / TXT / MD) and return the server-side path Langflow
   // expects in tweaks. Tries the modern /api/v2/files endpoint first, and
   // falls back to the legacy per-flow upload route on 404 (older Langflow).
   async function uploadFile(file) {
@@ -574,28 +574,363 @@
     return el;
   }
 
+  // ==========================================================================
+  // Section: Test-case structured view
+  // Detects TC tables in AI markdown and renders a rich phase/table UI.
+  // ==========================================================================
+
+  // Returns the index of the first header cell matching any pattern, or -1.
+  function findTCCol(headerCells, patterns) {
+    for (var ci = 0; ci < headerCells.length; ci++) {
+      var h = headerCells[ci].trim();
+      if (patterns.some(function (p) { return p.test(h); })) return ci;
+    }
+    return -1;
+  }
+
+  // Scans markdown for pipe-tables that have both an ID-like column and a
+  // Priority column, collecting them into phase objects grouped by any
+  // preceding H1-H3 header.  Returns an array of phases, or null.
+  function extractTestCasePhases(md) {
+    var lines = String(md).replace(/\r\n/g, "\n").split("\n");
+    var sections = [];   // ordered: { type:'markdown', content } | { type:'phase', data }
+    var mdBuffer = [];   // accumulates lines for the current markdown block
+    var pendingTitle = null;
+    var pendingHdrLine = null; // buffered header until we know what follows it
+    var i = 0;
+
+    function flushMd() {
+      var content = mdBuffer.join("\n").trim();
+      if (content) sections.push({ type: "markdown", content: content });
+      mdBuffer = [];
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+
+      // ---- Section header -------------------------------------------------
+      var hm = /^#{1,3}\s+(.+)$/.exec(line);
+      if (hm) {
+        if (pendingHdrLine !== null) mdBuffer.push(pendingHdrLine);
+        pendingTitle = hm[1].trim();
+        pendingHdrLine = line;
+        i++;
+        continue;
+      }
+
+      // ---- Table start ----------------------------------------------------
+      if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+        var headerCells = splitTableRow(line).map(function (h) { return h.trim(); });
+        var idColT  = findTCCol(headerCells, [/^(tc[\s_-]?id|test[\s_-]?case[\s_-]?id|id)$/i]);
+        var priColT = findTCCol(headerCells, [/^(priority|pri|severity|sev)$/i]);
+
+        if (idColT === -1 || priColT === -1) {
+          // Non-TC table: resolve pending header into markdown, then flush as its own section
+          if (pendingHdrLine !== null) { mdBuffer.push(pendingHdrLine); pendingHdrLine = null; pendingTitle = null; }
+          mdBuffer.push(line);
+          mdBuffer.push(lines[i + 1]);
+          i += 2;
+          while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { mdBuffer.push(lines[i]); i++; }
+          flushMd();
+          continue;
+        }
+
+        // TC table: pendingHdrLine is the phase title — do NOT flush it into markdown
+        flushMd();              // flush only mdBuffer (blank lines etc.), not pendingHdrLine
+        pendingHdrLine = null;  // consumed as TC title
+        i += 2;
+
+        var sumCol = findTCCol(headerCells, [/^(summary|title|description|test[\s_-]?case([\s_-]?name)?|scenario|test[\s_-]?scenario)$/i]);
+        var preCol = findTCCol(headerCells, [/^(pre[\s_-]?conditions?|preconditions?|prerequisites?|initial[\s_-]?conditions?|setup)$/i]);
+        var stpCol = findTCCol(headerCells, [
+          /^(steps?|test[\s_-]?steps?|test[\s_-]?case[\s_-]?steps?|action[\s_-]?steps?|execution[\s_-]?steps?|testing[\s_-]?steps?|procedure)$/i,
+          /pre[\s_-]?conditions?[\s_&+,\/]+steps?/i,
+          /steps?[\s_&+,\/]+pre[\s_-]?conditions?/i
+        ]);
+        var expCol = findTCCol(headerCells, [/^(expected[\s_-]?results?|expected[\s_-]?output|expected[\s_-]?behavior|outcome|pass[\s_-]?criteria)$/i]);
+        var covCol = findTCCol(headerCells, [/^(requirements?|req[\s_-]?id|covers|coverage|traceability|maps?[\s_-]?to)$/i]);
+
+        if (stpCol === -1) {
+          var usedCols = [idColT, priColT, sumCol, preCol, expCol, covCol].filter(function (c) { return c >= 0; });
+          for (var fb = 0; fb < headerCells.length; fb++) {
+            if (usedCols.indexOf(fb) === -1) { stpCol = fb; break; }
+          }
+        }
+
+        var phase = { title: pendingTitle || "Test Cases", rows: [] };
+        pendingTitle = null;
+
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+          var cells = splitTableRow(lines[i]);
+          var get = function (col) { return (col >= 0 && cells[col] !== undefined) ? cells[col].trim() : ""; };
+          phase.rows.push({
+            id: get(idColT), summary: get(sumCol), coverage: get(covCol),
+            preconditions: get(preCol), steps: get(stpCol),
+            expectedResult: get(expCol), priority: get(priColT),
+          });
+          i++;
+        }
+        if (phase.rows.length > 0) sections.push({ type: "phase", data: phase });
+        continue;
+      }
+
+      // ---- Blank line -----------------------------------------------------
+      // Do NOT resolve pendingHdrLine for blank lines — the heading might still
+      // precede a TC table that we haven't seen yet.
+      if (line.trim() === "") {
+        mdBuffer.push(line);
+        i++;
+        continue;
+      }
+
+      // ---- Regular non-blank line -----------------------------------------
+      // Now we know the pending header is NOT followed by a TC table
+      if (pendingHdrLine !== null) { mdBuffer.push(pendingHdrLine); pendingHdrLine = null; }
+      mdBuffer.push(line);
+      i++;
+    }
+
+    if (pendingHdrLine !== null) mdBuffer.push(pendingHdrLine);
+    flushMd();
+
+    var hasPhases = sections.some(function (s) { return s.type === "phase"; });
+    return hasPhases ? sections : null;
+  }
+
+  // Renders an array of TC phases as a structured DOM element.
+  function renderTestCasePhases(phases) {
+    var wrap = document.createElement("div");
+    wrap.className = "tc-phases-wrap";
+
+    phases.forEach(function (phase) {
+      var phaseEl = document.createElement("div");
+      phaseEl.className = "tc-phase";
+
+      var counts = { p0: 0, p1: 0, p2: 0, other: 0 };
+      phase.rows.forEach(function (r) {
+        var p = (r.priority || "").toLowerCase();
+        if (p === "p0" || p === "critical") counts.p0++;
+        else if (p === "p1" || p === "high")  counts.p1++;
+        else if (p === "p2" || p === "medium") counts.p2++;
+        else counts.other++;
+      });
+
+      var hdr = document.createElement("div");
+      hdr.className = "tc-phase-header";
+      hdr.innerHTML =
+        '<span class="tc-phase-title">' + escapeHtml(phase.title) + "</span>" +
+        '<span class="tc-count-badge">' + phase.rows.length + " case" + (phase.rows.length !== 1 ? "s" : "") + "</span>" +
+        (counts.p0    ? '<span class="tc-pri-pill tc-pill-p0">P0\u00b7' + counts.p0    + "</span>" : "") +
+        (counts.p1    ? '<span class="tc-pri-pill tc-pill-p1">P1\u00b7' + counts.p1    + "</span>" : "") +
+        (counts.p2    ? '<span class="tc-pri-pill tc-pill-p2">P2\u00b7' + counts.p2    + "</span>" : "") +
+        (counts.other ? '<span class="tc-pri-pill tc-pill-other">P3\u00b7' + counts.other + "</span>" : "") +
+        '<button type="button" class="tc-copy-phase-btn">\u229e Copy phase</button>';
+
+      hdr.querySelector(".tc-copy-phase-btn").addEventListener("click", function () {
+        var text = phase.rows.map(function (r) {
+          var out = r.id + (r.summary ? " \u2014 " + r.summary : "");
+          if (r.preconditions) out += "\nPre: " + r.preconditions;
+          if (r.steps)         out += "\nSteps: " + r.steps;
+          if (r.expectedResult) out += "\nExpected: " + r.expectedResult;
+          out += "\nPriority: " + r.priority;
+          return out;
+        }).join("\n\n");
+        navigator.clipboard.writeText(text);
+        showToast("Phase copied.");
+      });
+      phaseEl.appendChild(hdr);
+
+      var tWrap = document.createElement("div");
+      tWrap.className = "tc-table-wrap";
+      var table = document.createElement("table");
+      table.className = "tc-table";
+
+      var thead = document.createElement("thead");
+      thead.innerHTML = "<tr><th>ID</th><th>SUMMARY</th><th>PRE-CONDITIONS &amp; STEPS</th><th>EXPECTED RESULT</th><th>PRI</th></tr>";
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      phase.rows.forEach(function (row) {
+        var tr = document.createElement("tr");
+
+        var tdId = document.createElement("td");
+        tdId.className = "tc-td tc-id-cell";
+        tdId.textContent = row.id;
+
+        var tdSum = document.createElement("td");
+        tdSum.className = "tc-td tc-summary-cell";
+        // Extract inline "(Covers: R1)" from summary if no dedicated coverage column
+        var summaryText = row.summary || "";
+        var coverageText = row.coverage || "";
+        if (!coverageText) {
+          var coversMatch = /\s*\(?[Cc]overs?:?\s*([^)]+?)\)?\s*$/i.exec(summaryText);
+          if (coversMatch) {
+            coverageText = "Covers " + coversMatch[1].trim();
+            summaryText = summaryText.slice(0, coversMatch.index).trim();
+          }
+        }
+        tdSum.innerHTML = '<div class="tc-sum-title">' + renderInline(summaryText) + "</div>" +
+          (coverageText ? '<div class="tc-coverage-tag">' + escapeHtml(coverageText) + "</div>" : "");
+
+        var tdSteps = document.createElement("td");
+        tdSteps.className = "tc-td tc-steps-cell";
+        var sHtml = "";
+        if (row.preconditions) {
+          sHtml += '<p class="tc-pre-line"><span class="tc-pre-label">PRE </span>' + renderInline(row.preconditions) + "</p>";
+        }
+        if (row.steps) {
+          var stepsText = row.steps;
+          var preFromCombined = "";
+
+          if (!row.preconditions) {
+            // Top-level extraction handles "Pre-Conditions: text" or plain text before first step number
+            var topPreMatch = /^\*{0,2}pre[\s_-]?conditions?[:\s*]+(.+?)(?=\s*\*{0,2}steps?[:\s*]|\s*\d+[\.)][\s]|\s*$)/i.exec(stepsText);
+            if (topPreMatch) {
+              preFromCombined = topPreMatch[1].trim().replace(/\.?\s*$/, "");
+              stepsText = stepsText.slice(topPreMatch[0].length).trim();
+              stepsText = stepsText.replace(/^\*{0,2}steps?[:\s*]*/i, "").trim();
+            }
+          }
+
+          if (preFromCombined) {
+            sHtml += '<p class="tc-pre-line"><span class="tc-pre-label">PRE </span>' + renderInline(preFromCombined) + "</p>";
+            preFromCombined = "";
+          }
+
+          var parts = stepsText.split(/(?=\d+[\.)][\s])/).map(function (s) {
+            return s.replace(/^\d+[\.)][\s]+/, "").trim();
+          }).filter(Boolean);
+
+          // Post-split: AI often puts "**Pre-Conditions:** text **Steps:**" as the FIRST numbered step.
+          // Detect and extract it here instead.
+          if (parts.length > 0 && !row.preconditions) {
+            var fp = parts[0];
+            if (/^\*{0,2}pre[\s_-]?conditions?/i.test(fp)) {
+              var condText = fp
+                .replace(/^\*{0,2}pre[\s_-]?conditions?[:\s*]+/i, "")  // strip "**Pre-Conditions:**" or "Pre-Conditions:" prefix
+                .replace(/\s*\*{0,2}steps?[:\s*]*$/i, "")               // strip trailing "**Steps:**" or "Steps:" suffix
+                .trim()
+                .replace(/\.+$/, "");
+              if (condText) {
+                sHtml += '<p class="tc-pre-line"><span class="tc-pre-label">PRE </span>' + renderInline(condText) + "</p>";
+              }
+              parts.shift(); // consumed — not a real step
+            }
+          }
+
+          if (parts.length > 1) {
+            sHtml += '<div class="tc-steps-list">' + parts.map(function (s, idx) {
+              return '<div class="tc-step-row"><span class="tc-step-n">' + (idx + 1) + '</span><span class="tc-step-text">' + renderInline(s) + "</span></div>";
+            }).join("") + "</div>";
+          } else if (parts.length === 1) {
+            sHtml += '<p class="tc-steps-plain">' + renderInline(parts[0]) + "</p>";
+          } else if (stepsText) {
+            sHtml += '<p class="tc-steps-plain">' + renderInline(stepsText) + "</p>";
+          }
+        }
+        tdSteps.innerHTML = sHtml || '<span class="tc-na">\u2014</span>';
+
+        var tdExp = document.createElement("td");
+        tdExp.className = "tc-td tc-expected-cell";
+        tdExp.innerHTML = '<div class="tc-expected-box">' + renderInline(row.expectedResult || "\u2014") + "</div>";
+
+        var tdPri = document.createElement("td");
+        tdPri.className = "tc-td tc-pri-cell";
+        var pl = (row.priority || "").toLowerCase();
+        var bc = pl === "p0" || pl === "critical" ? "tc-badge-p0" :
+                 pl === "p1" || pl === "high"     ? "tc-badge-p1" :
+                 pl === "p2" || pl === "medium"   ? "tc-badge-p2" : "tc-badge-other";
+        tdPri.innerHTML = '<span class="tc-badge ' + bc + '">' + escapeHtml(row.priority || "") + "</span>";
+
+        tr.appendChild(tdId); tr.appendChild(tdSum); tr.appendChild(tdSteps);
+        tr.appendChild(tdExp); tr.appendChild(tdPri);
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      tWrap.appendChild(table);
+      phaseEl.appendChild(tWrap);
+      wrap.appendChild(phaseEl);
+    });
+    return wrap;
+  }
+
   function appendAssistantMessage(markdownText) {
     const el = document.createElement("div");
     el.className = "message message-assistant";
     el.dataset.rawMarkdown = markdownText;
-    el.innerHTML =
-      '<div class="message-bubble">' + renderMarkdown(markdownText) + "</div>" +
-      '<div class="message-meta">' + ASSISTANT_NAME + " · " + nowTimeString() + "</div>";
 
-    // Per-message copy button — copies raw markdown (spec item 9)
+    // Render AI response as plain markdown
+    const bubble = document.createElement("div");
+    bubble.className = "message-bubble";
+    bubble.innerHTML = renderMarkdown(markdownText);
+    el.appendChild(bubble);
+
+    const meta = document.createElement("div");
+    meta.className = "message-meta";
+    meta.textContent = ASSISTANT_NAME + " · " + nowTimeString();
+    el.appendChild(meta);
+
+    // ---- Action buttons row (Retry / Copy / Like / Dislike) ----
+    const actionsRow = document.createElement("div");
+    actionsRow.className = "msg-actions";
+
+    // 1. Retry
+    const retryBtn = document.createElement("button");
+    retryBtn.type = "button";
+    retryBtn.className = "msg-action-btn";
+    retryBtn.setAttribute("aria-label", "Retry");
+    retryBtn.title = "Retry";
+    retryBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.07"/></svg>';
+    retryBtn.addEventListener("click", function () {
+      onRetryAssistantMessage(el);
+    });
+
+    // 2. Copy
+    const SVG_COPY = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    const SVG_CHECK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
-    copyBtn.className = "msg-copy-btn";
+    copyBtn.className = "msg-action-btn";
     copyBtn.setAttribute("aria-label", "Copy message");
     copyBtn.title = "Copy message";
-    copyBtn.textContent = "Copy";
+    copyBtn.innerHTML = SVG_COPY;
     copyBtn.addEventListener("click", function () {
       navigator.clipboard.writeText(markdownText).then(function () {
-        copyBtn.textContent = "Copied!";
-        setTimeout(function () { copyBtn.textContent = "Copy"; }, 1500);
+        copyBtn.innerHTML = SVG_CHECK;
+        setTimeout(function () { copyBtn.innerHTML = SVG_COPY; }, 1500);
       });
     });
-    el.appendChild(copyBtn);
+
+    // 3. Like
+    const likeBtn = document.createElement("button");
+    likeBtn.type = "button";
+    likeBtn.className = "msg-action-btn";
+    likeBtn.setAttribute("aria-label", "Like");
+    likeBtn.title = "Like";
+    likeBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>';
+    likeBtn.addEventListener("click", function () {
+      const nowLiked = likeBtn.classList.toggle("msg-action-liked");
+      if (nowLiked) dislikeBtn.classList.remove("msg-action-disliked");
+    });
+
+    // 4. Dislike
+    const dislikeBtn = document.createElement("button");
+    dislikeBtn.type = "button";
+    dislikeBtn.className = "msg-action-btn";
+    dislikeBtn.setAttribute("aria-label", "Dislike");
+    dislikeBtn.title = "Dislike";
+    dislikeBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>';
+    dislikeBtn.addEventListener("click", function () {
+      const nowDisliked = dislikeBtn.classList.toggle("msg-action-disliked");
+      if (nowDisliked) likeBtn.classList.remove("msg-action-liked");
+    });
+
+    actionsRow.appendChild(retryBtn);
+    actionsRow.appendChild(copyBtn);
+    actionsRow.appendChild(likeBtn);
+    actionsRow.appendChild(dislikeBtn);
+    el.appendChild(actionsRow);
 
     elements.chatMessages.appendChild(el);
     scrollToBottom();
@@ -729,6 +1064,60 @@
     messageEl.appendChild(actionsRow);
   }
 
+  // ---- Retry / Regenerate -------------------------------------------------------
+
+  // Removes this assistant message (and any subsequent messages) and re-runs
+  // the generation using the preceding user message text.
+  function onRetryAssistantMessage(assistantEl) {
+    const children = Array.from(elements.chatMessages.children);
+    const assistantIdx = children.indexOf(assistantEl);
+    if (assistantIdx === -1) return;
+
+    // Walk backwards to find the user message that triggered this response.
+    let userMsgEl = null;
+    for (let i = assistantIdx - 1; i >= 0; i--) {
+      if (children[i].classList.contains("message-user")) {
+        userMsgEl = children[i];
+        break;
+      }
+    }
+    if (!userMsgEl) return;
+    const userText = userMsgEl.dataset.messageText;
+    if (!userText) return;
+
+    // Remove the assistant message and anything that came after it.
+    for (let i = children.length - 1; i >= assistantIdx; i--) {
+      children[i].remove();
+    }
+
+    regenerateResponse(userText);
+  }
+
+  // Re-runs text generation for `text` without adding a new user bubble.
+  async function regenerateResponse(text) {
+    state.lastRequest = function () { regenerateResponse(text); };
+    state.abortController = new AbortController();
+    showTypingIndicator();
+    elements.sendBtn.disabled = true;
+    const t0 = Date.now();
+    try {
+      const data = await runTextGeneration(text, state.abortController.signal);
+      hideTypingIndicator();
+      const replyText = extractMessageText(data);
+      saveLocalMessage(state.sessionId, "assistant", replyText);
+      appendAssistantMessage(replyText);
+      updateStatusBar(Date.now() - t0);
+    } catch (err) {
+      hideTypingIndicator();
+      if (!err.isAborted) {
+        appendErrorMessage(err, state.lastRequest);
+      }
+    } finally {
+      state.abortController = null;
+      elements.sendBtn.disabled = false;
+    }
+  }
+
   // ---- Send flow -------------------------------------------------------
 
   function autoResizeInput() {
@@ -741,6 +1130,7 @@
 
   async function sendUserStory(text) {
     appendUserMessage(text);
+    saveLocalMessage(state.sessionId, "user", text);
     recordSessionMessage(text);
     state.lastRequest = function () { sendUserStory(text); };
     state.abortController = new AbortController();
@@ -750,7 +1140,9 @@
     try {
       const data = await runTextGeneration(text, state.abortController.signal);
       hideTypingIndicator();
-      appendAssistantMessage(extractMessageText(data));
+      const replyText = extractMessageText(data);
+      saveLocalMessage(state.sessionId, "assistant", replyText);
+      appendAssistantMessage(replyText);
       updateStatusBar(Date.now() - t0);
     } catch (err) {
       hideTypingIndicator();
@@ -766,7 +1158,9 @@
   // File mode send: upload then run, showing "Analyzing <filename>..." as
   // the user-facing message instead of the raw file object.
   async function sendFileStory(file) {
-    appendUserMessage("Analyzing " + file.name + "...");
+    const userMsg = "Analyzing " + file.name + "...";
+    appendUserMessage(userMsg);
+    saveLocalMessage(state.sessionId, "user", userMsg);
     recordSessionMessage(file.name);
     state.lastRequest = function () { sendFileStory(file); };
     state.abortController = new AbortController();
@@ -777,7 +1171,9 @@
       const uploadedPath = await uploadFile(file);
       const data = await runFileGeneration(uploadedPath, file.name, state.abortController.signal);
       hideTypingIndicator();
-      appendAssistantMessage(extractMessageText(data));
+      const replyText = extractMessageText(data);
+      saveLocalMessage(state.sessionId, "assistant", replyText);
+      appendAssistantMessage(replyText);
       updateStatusBar(Date.now() - t0);
     } catch (err) {
       hideTypingIndicator();
@@ -876,7 +1272,9 @@
   }
 
   async function runJiraStorySend(jiraStoryText, ticketId) {
-    appendUserMessage("Generate test cases from imported ticket " + ticketId + "...");
+    const userMsg = "Generate test cases from imported ticket " + ticketId + "...";
+    appendUserMessage(userMsg);
+    saveLocalMessage(state.sessionId, "user", userMsg);
     recordSessionMessage(ticketId);
     state.lastRequest = function () { runJiraStorySend(jiraStoryText, ticketId); };
     state.abortController = new AbortController();
@@ -886,7 +1284,9 @@
     try {
       const data = await runJiraStoryGeneration(jiraStoryText, ticketId, state.abortController.signal);
       hideTypingIndicator();
-      appendAssistantMessage(extractMessageText(data));
+      const replyText = extractMessageText(data);
+      saveLocalMessage(state.sessionId, "assistant", replyText);
+      appendAssistantMessage(replyText);
       updateStatusBar(Date.now() - t0);
     } catch (err) {
       hideTypingIndicator();
@@ -932,13 +1332,13 @@
   // ==========================================================================
 
   function isAcceptedFile(file) {
-    return /\.pdf$/i.test(file.name);
+    return /\.(pdf|txt|md)$/i.test(file.name);
   }
 
   function setAttachedFile(file) {
     if (!file) return;
     if (!isAcceptedFile(file)) {
-      appendErrorMessage(new Error("Only PDF files are supported."), null);
+      appendErrorMessage(new Error("Only PDF, TXT, and MD files are supported."), null);
       return;
     }
     state.attachedFile = file;
@@ -1011,8 +1411,8 @@
   const SAMPLE_STORIES = [
     {
       domain: "Banking",
-      icon: "🏦",
       title: "Fund Transfer",
+      subtitle: "IMPS/NEFT transfer between accounts",
       text:
         "As a bank customer, I want to transfer funds between my linked " +
         "accounts so that I can move money without visiting a branch. The " +
@@ -1021,8 +1421,8 @@
     },
     {
       domain: "Insurance",
-      icon: "🛡️",
       title: "Policy Claim Submission",
+      subtitle: "First-notice-of-loss claim flow",
       text:
         "As a policyholder, I want to submit a claim for a covered incident " +
         "with supporting documents so that my claim can be reviewed and " +
@@ -1031,8 +1431,8 @@
     },
     {
       domain: "Finance",
-      icon: "📊",
       title: "Loan EMI Calculation",
+      subtitle: "EMI schedule for a term loan",
       text:
         "As a loan applicant, I want to calculate my monthly EMI based on " +
         "loan amount, interest rate, and tenure so that I can evaluate " +
@@ -1042,35 +1442,75 @@
   ];
 
   // Renders the centered welcome + sample-story cards shown before the
-  // first message. Cards fill the input on click; they don't auto-send,
-  // so the user can edit the story first.
+  // first message. Cards are hidden behind a "Try an example" toggle.
   function renderEmptyState() {
+    // Revert composer placeholder to the default welcome prompt
+    elements.chatInput.placeholder = "I\u2019m " + ASSISTANT_NAME + " \u2014 type your user story here";
+
+    // Apply vertically-centered empty layout
+    elements.chatPanel.classList.add("is-empty");
+
     const el = document.createElement("div");
     el.className = "empty-state";
     el.id = "empty-state";
 
-    const cardsHtml = SAMPLE_STORIES.map(function (story, idx) {
-      return (
-        '<button type="button" class="sample-card" data-story-index="' + idx + '">' +
-          '<span class="sample-card-icon" aria-hidden="true">' + story.icon + "</span>" +
-          '<span class="sample-card-domain">' + escapeHtml(story.domain) + "</span>" +
-          '<span class="sample-card-title">' + escapeHtml(story.title) + "</span>" +
-        "</button>"
-      );
-    }).join("");
+    const SEND_ICON = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
 
     el.innerHTML =
       '<div class="empty-state-inner">' +
-        '<div class="empty-state-badge" aria-hidden="true">💬</div>' +
+        '<div class="empty-state-badge" aria-hidden="true">✈️</div>' +
         '<h2 class="empty-state-title">' + escapeHtml(ASSISTANT_NAME) + "</h2>" +
-        '<p class="empty-state-message">' + escapeHtml(WELCOME_MESSAGE) + "</p>" +
-        '<p class="empty-state-hint">Try a sample story, or type your own below.</p>' +
-        '<div class="sample-cards">' + cardsHtml + "</div>" +
+        '<p class="empty-state-message">Paste a user story, attach a PRD, or pull from Jira \u2014 I\u2019ll return structured, execution-ready test cases.</p>' +
       "</div>";
 
     elements.chatMessages.appendChild(el);
 
-    el.querySelectorAll(".sample-card").forEach(function (btn) {
+    // Render "Try an example" toggle + cards into the footer slot (below the composer)
+    var footer = document.getElementById("composer-footer");
+    if (!footer) return;
+
+    const cardsHtml = SAMPLE_STORIES.map(function (story, idx) {
+      return (
+        '<button type="button" class="sample-card" data-story-index="' + idx + '">' +
+          '<span class="sample-card-domain">' + escapeHtml(story.domain) + "</span>" +
+          '<span class="sample-card-title">' + escapeHtml(story.title) + "</span>" +
+          '<span class="sample-card-subtitle">' + escapeHtml(story.subtitle) + "</span>" +
+        "</button>"
+      );
+    }).join("");
+
+    footer.innerHTML =
+      '<button type="button" class="try-example-btn" id="try-example-btn">' +
+        'Try an example <span class="try-example-chevron" aria-hidden="true">&#9660;</span>' +
+      '</button>' +
+      '<div class="sample-cards" id="sample-cards-panel" hidden>' + cardsHtml + '</div>';
+    footer.removeAttribute("hidden");
+
+    const tryBtn = footer.querySelector("#try-example-btn");
+    const cardsPanel = footer.querySelector("#sample-cards-panel");
+    tryBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      const opening = cardsPanel.hasAttribute("hidden");
+      if (opening) {
+        cardsPanel.removeAttribute("hidden");
+        tryBtn.innerHTML = 'Try an example <span class="try-example-chevron" aria-hidden="true">&#9650;</span>';
+        setTimeout(function () {
+          document.addEventListener("click", function closeOnOutside(ev) {
+            var f = document.getElementById("composer-footer");
+            if (!f || !f.contains(ev.target)) {
+              cardsPanel.setAttribute("hidden", "");
+              tryBtn.innerHTML = 'Try an example <span class="try-example-chevron" aria-hidden="true">&#9660;</span>';
+              document.removeEventListener("click", closeOnOutside);
+            }
+          });
+        }, 0);
+      } else {
+        cardsPanel.setAttribute("hidden", "");
+        tryBtn.innerHTML = 'Try an example <span class="try-example-chevron" aria-hidden="true">&#9660;</span>';
+      }
+    });
+
+    footer.querySelectorAll(".sample-card").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const story = SAMPLE_STORIES[Number(btn.dataset.storyIndex)];
         elements.chatInput.value = story.text;
@@ -1083,6 +1523,13 @@
   function clearEmptyState() {
     const el = document.getElementById("empty-state");
     if (el) el.remove();
+    // Restore normal chat layout
+    elements.chatPanel.classList.remove("is-empty");
+    // Hide and clear the footer slot
+    var footer = document.getElementById("composer-footer");
+    if (footer) { footer.setAttribute("hidden", ""); footer.innerHTML = ""; }
+    // Switch composer to follow-up prompt once the chat is active
+    elements.chatInput.placeholder = "Ask a follow-up, or paste the next user story...";
   }
 
   // ==========================================================================
@@ -1437,6 +1884,25 @@
   // ==========================================================================
 
   const SESSIONS_KEY = "tcgen_sessions";
+  const MSG_KEY_PREFIX = "tcgen_msgs_";
+
+  function loadLocalMessages(sessionId) {
+    try {
+      return JSON.parse(localStorage.getItem(MSG_KEY_PREFIX + sessionId) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveLocalMessage(sessionId, role, text) {
+    var msgs = loadLocalMessages(sessionId);
+    msgs.push({ role: role, text: text });
+    localStorage.setItem(MSG_KEY_PREFIX + sessionId, JSON.stringify(msgs));
+  }
+
+  function deleteLocalMessages(sessionId) {
+    localStorage.removeItem(MSG_KEY_PREFIX + sessionId);
+  }
 
   function loadSessions() {
     try {
@@ -1472,12 +1938,13 @@
   function getDateGroup(isoString) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const d = new Date(isoString);
-    const diff = todayStart - d;
-    if (diff <= 0) return "Today";
-    if (diff < 86400000) return "Yesterday";
-    if (diff < 7 * 86400000) return "Previous 7 Days";
-    if (diff < 30 * 86400000) return "Previous 30 Days";
+    const sessionDay = new Date(isoString);
+    sessionDay.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((todayStart - sessionDay) / 86400000);
+    if (diffDays <= 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays <= 7) return "Previous 7 Days";
+    if (diffDays <= 30) return "Previous 30 Days";
     return "Over 30 Days";
   }
 
@@ -1574,9 +2041,28 @@
       document.getElementById("sidebar-overlay").classList.remove("overlay-visible");
     }
 
-    // Show a spinner while fetching.
     elements.chatMessages.innerHTML = "";
     setExportState(false);
+
+    // Load from localStorage first — instant, no network request needed.
+    const localMsgs = loadLocalMessages(sessionId);
+    if (localMsgs.length > 0) {
+      state.sessionId = sessionId;
+      state.lastRequest = null;
+      clearAttachedFile();
+      updateStatusBar(null);
+      localMsgs.forEach(function (msg) {
+        if (msg.role === "user") {
+          appendUserMessage(msg.text);
+        } else {
+          appendAssistantMessage(msg.text);
+        }
+      });
+      renderSidebar();
+      return;
+    }
+
+    // Fall back to Langflow's monitor API.
     showTypingIndicator();
 
     try {
@@ -1653,7 +2139,8 @@
       // Swallow — local removal below always runs.
     }
 
-    // Remove from registry.
+    // Remove local messages and session registry entry.
+    deleteLocalMessages(sessionId);
     saveSessions(loadSessions().filter(function (s) { return s.id !== sessionId; }));
 
     // If the deleted session was the active one, start fresh.
@@ -1761,7 +2248,7 @@
     updateStatusBar(null);
     const nameEl = document.getElementById("assistant-name-header");
     if (nameEl) nameEl.textContent = ASSISTANT_NAME;
-    elements.chatInput.placeholder = "I'm " + ASSISTANT_NAME + " — type your user story here";
+    elements.chatInput.placeholder = "I\u2019m " + ASSISTANT_NAME + " \u2014 type your user story here";
     renderEmptyState();
     renderSidebar();
   }
