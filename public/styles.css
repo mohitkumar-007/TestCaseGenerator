@@ -1522,6 +1522,22 @@ textarea:focus-visible {
 }
 
 .tc-summary-cell { width: 230px; }
+.tc-category-cell {
+  width: 96px;
+  text-align: center;
+  vertical-align: top;
+  padding: 12px 8px;
+}
+.tc-category-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.73rem;
+  font-weight: 600;
+  background: #eef0f7;
+  color: #3d4966;
+  white-space: nowrap;
+}
 .tc-sum-title {
   font-weight: 600;
   font-size: 0.85rem;

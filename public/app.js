@@ -649,9 +649,10 @@
         ]);
         var expCol = findTCCol(headerCells, [/^(expected[\s_-]?results?|expected[\s_-]?output|expected[\s_-]?behavior|outcome|pass[\s_-]?criteria)$/i]);
         var covCol = findTCCol(headerCells, [/^(requirements?|req[\s_-]?id|covers|coverage|traceability|maps?[\s_-]?to)$/i]);
+        var catCol = findTCCol(headerCells, [/^(category|test[\s_-]?category|test[\s_-]?type|type|test[\s_-]?classification)$/i]);
 
         if (stpCol === -1) {
-          var usedCols = [idColT, priColT, sumCol, preCol, expCol, covCol].filter(function (c) { return c >= 0; });
+          var usedCols = [idColT, priColT, sumCol, preCol, expCol, covCol, catCol].filter(function (c) { return c >= 0; });
           for (var fb = 0; fb < headerCells.length; fb++) {
             if (usedCols.indexOf(fb) === -1) { stpCol = fb; break; }
           }
@@ -665,6 +666,7 @@
           var get = function (col) { return (col >= 0 && cells[col] !== undefined) ? cells[col].trim() : ""; };
           phase.rows.push({
             id: get(idColT), summary: get(sumCol), coverage: get(covCol),
+            category: get(catCol),
             preconditions: get(preCol), steps: get(stpCol),
             expectedResult: get(expCol), priority: get(priColT),
           });
@@ -745,8 +747,13 @@
       var table = document.createElement("table");
       table.className = "tc-table";
 
+      // Only show CATEGORY column when at least one row has a value
+      var hasCategory = phase.rows.some(function (r) { return r.category; });
+
       var thead = document.createElement("thead");
-      thead.innerHTML = "<tr><th>ID</th><th>SUMMARY</th><th>PRE-CONDITIONS &amp; STEPS</th><th>EXPECTED RESULT</th><th>PRI</th></tr>";
+      thead.innerHTML = "<tr><th>ID</th><th>SUMMARY</th>" +
+        (hasCategory ? "<th>CATEGORY</th>" : "") +
+        "<th>PRE-CONDITIONS &amp; STEPS</th><th>EXPECTED RESULT</th><th>PRI</th></tr>";
       table.appendChild(thead);
 
       var tbody = document.createElement("tbody");
@@ -772,6 +779,16 @@
         tdSum.innerHTML = '<div class="tc-sum-title">' + renderInline(summaryText) + "</div>" +
           (coverageText ? '<div class="tc-coverage-tag">' + escapeHtml(coverageText) + "</div>" : "");
 
+        // Category cell (only when phase has categories)
+        var tdCat;
+        if (hasCategory) {
+          tdCat = document.createElement("td");
+          tdCat.className = "tc-td tc-category-cell";
+          tdCat.innerHTML = row.category
+            ? '<span class="tc-category-badge">' + escapeHtml(row.category) + "</span>"
+            : "";
+        }
+
         var tdSteps = document.createElement("td");
         tdSteps.className = "tc-td tc-steps-cell";
         var sHtml = "";
@@ -783,12 +800,16 @@
           var preFromCombined = "";
 
           if (!row.preconditions) {
-            // Top-level extraction handles "Pre-Conditions: text" or plain text before first step number
-            var topPreMatch = /^\*{0,2}pre[\s_-]?conditions?[:\s*]+(.+?)(?=\s*\*{0,2}steps?[:\s*]|\s*\d+[\.)][\s]|\s*$)/i.exec(stepsText);
-            if (topPreMatch) {
-              preFromCombined = topPreMatch[1].trim().replace(/\.?\s*$/, "");
-              stepsText = stepsText.slice(topPreMatch[0].length).trim();
-              stepsText = stepsText.replace(/^\*{0,2}steps?[:\s*]*/i, "").trim();
+            // Split at explicit "Steps:" label — avoids splitting on things like "P3) are seated"
+            var stepsLabelIdx = stepsText.search(/\*{0,2}steps?[\s]*:/i);
+            if (stepsLabelIdx > 0) {
+              var beforeSteps = stepsText.slice(0, stepsLabelIdx).trim();
+              var prePrefix = /^\*{0,2}pre[\s_-]?conditions?[:\s*]+([\s\S]+)/i.exec(beforeSteps);
+              preFromCombined = (prePrefix ? prePrefix[1] : beforeSteps).trim().replace(/\.?\s*$/, "");
+              stepsText = stepsText.slice(stepsLabelIdx).replace(/^\*{0,2}steps?[\s]*:[:\s\*]*/i, "").trim();
+            } else {
+              var preOnly = /^\*{0,2}pre[\s_-]?conditions?[:\s*]+([\s\S]+)/i.exec(stepsText.trim());
+              if (preOnly) { preFromCombined = preOnly[1].trim().replace(/\.?\s*$/, ""); stepsText = ""; }
             }
           }
 
@@ -797,9 +818,23 @@
             preFromCombined = "";
           }
 
-          var parts = stepsText.split(/(?=\d+[\.)][\s])/).map(function (s) {
-            return s.replace(/^\d+[\.)][\s]+/, "").trim();
-          }).filter(Boolean);
+          // Only split into numbered steps when stepsText actually starts with a step
+          // number pattern (e.g. "1. ", "2) "). If it starts with prose (e.g. "Complete Deal 1."),
+          // treat the whole thing as a single plain-text step to avoid false splits.
+          var _sparts = [];
+          if (/^\d+[\.)][ \t]/.test(stepsText)) {
+            var _sre = /\d+[\.)][ \t]/g, _sm2, _slast = 0;
+            while ((_sm2 = _sre.exec(stepsText)) !== null) {
+              var _sp = _sm2.index, _sprev = _sp > 0 ? stepsText[_sp - 1] : "";
+              if (/[a-zA-Z]/.test(_sprev)) continue;
+              if (_sp > _slast) { var _sc = stepsText.slice(_slast, _sp).trim(); if (_sc) _sparts.push(_sc); }
+              _slast = _sp;
+            }
+            var _stail = stepsText.slice(_slast).trim(); if (_stail) _sparts.push(_stail);
+          } else if (stepsText) {
+            _sparts.push(stepsText);
+          }
+          var parts = _sparts.map(function (s) { return s.replace(/^\d+[\.)][ \t]+/, "").trim(); }).filter(function (s) { return s && !/^\d+[\.)]\s*$/.test(s); });
 
           // Post-split: AI often puts "**Pre-Conditions:** text **Steps:**" as the FIRST numbered step.
           // Detect and extract it here instead.
@@ -842,7 +877,9 @@
                  pl === "p2" || pl === "medium"   ? "tc-badge-p2" : "tc-badge-other";
         tdPri.innerHTML = '<span class="tc-badge ' + bc + '">' + escapeHtml(row.priority || "") + "</span>";
 
-        tr.appendChild(tdId); tr.appendChild(tdSum); tr.appendChild(tdSteps);
+        tr.appendChild(tdId); tr.appendChild(tdSum);
+        if (hasCategory && tdCat) tr.appendChild(tdCat);
+        tr.appendChild(tdSteps);
         tr.appendChild(tdExp); tr.appendChild(tdPri);
         tbody.appendChild(tr);
       });
@@ -855,15 +892,38 @@
     return wrap;
   }
 
+  // Renders assistant markdown, using the rich per-step test-case table UI for
+  // any TC phase tables detected, and the plain markdown renderer for everything
+  // else, preserving the original order of sections.
+  function renderAssistantContent(markdownText) {
+    const container = document.createElement("div");
+    const sections = extractTestCasePhases(markdownText);
+    if (!sections) {
+      container.innerHTML = renderMarkdown(markdownText);
+      return container;
+    }
+    sections.forEach(function (s) {
+      if (s.type === "phase") {
+        container.appendChild(renderTestCasePhases([s.data]));
+      } else {
+        const mdEl = document.createElement("div");
+        mdEl.innerHTML = renderMarkdown(s.content);
+        container.appendChild(mdEl);
+      }
+    });
+    return container;
+  }
+
   function appendAssistantMessage(markdownText) {
     const el = document.createElement("div");
     el.className = "message message-assistant";
     el.dataset.rawMarkdown = markdownText;
 
-    // Render AI response as plain markdown
+    // Render AI response as plain markdown, promoting any TC tables to the
+    // richer per-step phase view.
     const bubble = document.createElement("div");
     bubble.className = "message-bubble";
-    bubble.innerHTML = renderMarkdown(markdownText);
+    bubble.appendChild(renderAssistantContent(markdownText));
     el.appendChild(bubble);
 
     const meta = document.createElement("div");
@@ -1701,8 +1761,10 @@
   function setExportState(enabled) {
     hasTable = enabled;
     const exportBtn = document.getElementById("btn-export");
+    const exportCsvBtn = document.getElementById("btn-export-csv");
     const copyAllBtn = document.getElementById("btn-copy-all");
     if (exportBtn) exportBtn.disabled = !enabled;
+    if (exportCsvBtn) exportCsvBtn.disabled = !enabled;
     if (copyAllBtn) copyAllBtn.disabled = !enabled;
   }
 
@@ -1748,14 +1810,38 @@
     exportRowsToExcel(rows);
   });
 
+  // Export to CSV.
+  // Parses the LAST assistant message's markdown table(s), same as the Excel export.
+  document.getElementById("btn-export-csv").addEventListener("click", function () {
+    const messages = elements.chatMessages.querySelectorAll(".message-assistant[data-raw-markdown]");
+    if (!messages.length) {
+      showToast("No test case table found to export.", true);
+      return;
+    }
+    const lastMarkdown = messages[messages.length - 1].dataset.rawMarkdown;
+    const rows = extractTableRows(lastMarkdown);
+    if (!rows.length) {
+      showToast("No test case table found to export.", true);
+      return;
+    }
+    exportRowsToCsv(rows);
+  });
+
   // Maps source columns to the required output columns by header name.
   // Output columns: TC ID | Description | Steps | Priority | Expected Result
   const EXPORT_COLUMNS = ["TC ID", "Description", "Steps", "Priority", "Expected Result"];
 
+  // CSV export includes a dedicated Summary column alongside Description.
+  const CSV_EXPORT_COLUMNS = ["TC ID", "Summary", "Description", "Steps", "Priority", "Expected Result"];
+
   // Model output doesn't always use these exact header names (e.g. "Test Case ID"
   // instead of "TC ID"). Listed in priority order per target column.
+  // Summary and Description share fallback aliases since responses often only
+  // provide one of the two — falling back keeps both columns populated instead
+  // of leaving one blank.
   const COLUMN_ALIASES = {
     "TC ID": ["tc id", "test case id", "test id", "id"],
+    "Summary": ["summary", "title", "description"],
     "Description": ["description", "summary", "title"],
     "Steps": ["steps", "test steps", "steps to reproduce"],
     "Priority": ["priority"],
@@ -1811,35 +1897,127 @@
     return null;
   }
 
-  function exportRowsToExcel(rows) {
-    // Map source headers to required output columns by name/alias.
-    const outputRows = rows.map(function (row) {
+  // Splits a combined "**Pre-Conditions:** ... **Steps:** 1. ... 2. ..." blob
+  // (common when the model crams both into one Description-like cell instead
+  // of using separate columns) into { pre, steps: [...] }. Returns null when
+  // the text doesn't start with a recognizable Pre-Conditions/Steps marker, so
+  // callers can leave unrelated free-text cells untouched.
+  function splitPreconditionsAndSteps(raw) {
+    let text = String(raw || "").trim();
+    if (!/^\*{0,2}pre[\s_-]?conditions?[:\s*]/i.test(text) && !/^\*{0,2}steps?[:\s*]/i.test(text)) {
+      return null;
+    }
+
+    let pre = "";
+    const preLabelMatch = /^\*{0,2}pre[\s_-]?conditions?[:\s*]+/i.exec(text);
+    if (preLabelMatch) {
+      const rest = text.slice(preLabelMatch[0].length);
+      // Prefer splitting at an explicit "**Steps:**" label; only fall back to
+      // splitting at the first numbered step when no such label exists, since
+      // preconditions can themselves contain "N." (e.g. "cooldown = 3.").
+      const stepsLabelMatch = /\*{0,2}steps?[:\s*]/i.exec(rest);
+      if (stepsLabelMatch) {
+        pre = rest.slice(0, stepsLabelMatch.index).trim().replace(/\.?\s*$/, "");
+        text = rest.slice(stepsLabelMatch.index);
+      } else {
+        const numberedMatch = /\d+[\.)][\s]/.exec(rest);
+        if (numberedMatch) {
+          pre = rest.slice(0, numberedMatch.index).trim().replace(/\.?\s*$/, "");
+          text = rest.slice(numberedMatch.index);
+        } else {
+          pre = rest.trim().replace(/\.?\s*$/, "");
+          text = "";
+        }
+      }
+    }
+
+    const stepsMatch = /^\*{0,2}steps?[:\s*]*([\s\S]*)/i.exec(text.trim());
+    const stepsText = stepsMatch ? stepsMatch[1].trim() : text.trim();
+    const parts = stepsText.split(/(?=\d+[\.)][\s])/).map(function (s) {
+      return s.replace(/^\d+[\.)][\s]+/, "").trim();
+    }).filter(Boolean);
+
+    return { pre: pre, steps: parts.length ? parts : (stepsText ? [stepsText] : []) };
+  }
+
+  // Maps source headers to the given output columns by name/alias.
+  function mapRowsToColumns(rows, columns) {
+    return rows.map(function (row) {
       const rowKeys = Object.keys(row);
       const out = {};
-      EXPORT_COLUMNS.forEach(function (col) {
+      columns.forEach(function (col) {
         const key = findHeaderKey(rowKeys, col);
         out[col] = key ? row[key] : "";
       });
 
-      // No dedicated Steps column: some responses embed "**Steps:** ..." text
-      // inside another cell (e.g. Description). Pull it out if present.
-      if (!out["Steps"]) {
-        for (let k = 0; k < rowKeys.length; k++) {
-          const match = /\*\*Steps:?\*\*\s*([\s\S]*)/i.exec(row[rowKeys[k]]);
-          if (match) {
-            out["Steps"] = match[1].trim();
-            break;
-          }
+      // Some responses cram "**Pre-Conditions:** ... **Steps:** 1. ... 2. ..."
+      // into a single Description-like cell instead of separate columns. Split
+      // it so Description holds only the preconditions and Steps gets one
+      // line per numbered step instead of one run-on line.
+      const descKey = findHeaderKey(rowKeys, "Description");
+      const split = descKey ? splitPreconditionsAndSteps(row[descKey]) : null;
+      if (split) {
+        if (columns.indexOf("Description") !== -1 && split.pre) {
+          out["Description"] = "Pre-Conditions: " + split.pre;
+        }
+        if (columns.indexOf("Steps") !== -1 && split.steps.length) {
+          out["Steps"] = split.steps.map(function (s, idx) { return (idx + 1) + ". " + s; }).join("\n");
         }
       }
       return out;
     });
+  }
 
+  function exportRowsToExcel(rows) {
+    const outputRows = mapRowsToColumns(rows, EXPORT_COLUMNS);
     const ws = XLSX.utils.json_to_sheet(outputRows, { header: EXPORT_COLUMNS });
+
+    // Widen columns and wrap text so embedded newlines (e.g. multi-line Steps)
+    // render as separate lines instead of one flattened row.
+    ws["!cols"] = EXPORT_COLUMNS.map(function (col) {
+      return { wch: col === "Description" || col === "Steps" || col === "Expected Result" ? 50 : 16 };
+    });
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: r, c: c })];
+        if (cell) cell.s = { alignment: { wrapText: true, vertical: "top" } };
+      }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Test Cases");
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    XLSX.writeFile(wb, "TestCases_" + dateStr + ".xlsx");
+    XLSX.writeFile(wb, "TestCases_" + dateStr + ".xlsx", { cellStyles: true });
+  }
+
+  // Escapes a value for CSV: wraps in quotes (doubling internal quotes) whenever
+  // it contains a comma, quote, or newline.
+  function csvEscape(value) {
+    const str = value === undefined || value === null ? "" : String(value);
+    if (/[",\n]/.test(str)) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  }
+
+  function exportRowsToCsv(rows) {
+    const outputRows = mapRowsToColumns(rows, CSV_EXPORT_COLUMNS);
+    const lines = [CSV_EXPORT_COLUMNS.map(csvEscape).join(",")];
+    outputRows.forEach(function (row) {
+      lines.push(CSV_EXPORT_COLUMNS.map(function (col) { return csvEscape(row[col]); }).join(","));
+    });
+    // Prefix a UTF-8 BOM so Excel opens the file with correct encoding.
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "TestCases_" + dateStr + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   // Toast — small non-blocking notification (red for errors, default for info).

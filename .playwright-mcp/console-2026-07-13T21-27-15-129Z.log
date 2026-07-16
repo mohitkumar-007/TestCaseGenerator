@@ -1,4 +1,0 @@
-[     356ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: claude-ai, env: production, version: e0bd9fcb09} @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c5f3f4681-Bbol1xOb.js:1
-[    5645ms] [LOG] recaptchacompat disabled @ https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off&onload=__antClientAttestationHcaptchaInvisibleReady:3
-[   41175ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: app-console, env: production, version: d25125e784dfd4cbd1da8aecda92eab57fd0c42e} @ https://platform.claude.com/_next/static/chunks/31036-7566e1007d7f4d60.js:48
-[   42436ms] [WARNING] [Intercom] The App ID in your code snippet has not been set. Set it to your App ID found in settings to complete installation: https://app.intercom.com/a/apps/_/settings/web @ https://js.intercomcdn.com/frame-modern.f947c68a.js:0

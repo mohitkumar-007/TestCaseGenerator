@@ -1,3 +1,0 @@
-[   13891ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSMNA_a_Pm1baVy-9VSViYVbkc3Fkhp5heEC19KSANYAQOGTu9UuyhLJg&s:0
-[   14065ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ https://ogads-pa.clients6.google.com/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData:0
-[   15142ms] [WARNING] Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://www.youtube.com') does not match the recipient window's origin ('https://www.google.com'). @ https://www.youtube.com/s/player/dd53c628/www-widgetapi.vflset/www-widgetapi.js:162

@@ -1,9 +1,0 @@
-[     484ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: claude-ai, env: production, version: e0bd9fcb09} @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c5f3f4681-Bbol1xOb.js:1
-[    3796ms] [LOG] recaptchacompat disabled @ https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off&onload=__antClientAttestationHcaptchaInvisibleReady:3
-[   43400ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://claude.ai/v1/oauth/c1ca77aa-439d-4db0-9c2f-0f2f56b6fc41/authorize:0
-[   43403ms] [ERROR] [REACT_QUERY_CLIENT] QueryClient error: Zp: Session is not fresh enough to grant elevated access. Sign in again to continue.
-    at ef (https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c5f3f4681-Bbol1xOb.js:2:174059)
-    at https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c5f3f4681-Bbol1xOb.js:3:83210
-    at async Object.mutationFn (https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c5f3f4681-Bbol1xOb.js:3:84787) @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c5f3f4681-Bbol1xOb.js:1
-[   51582ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: claude-ai, env: production, version: e0bd9fcb09} @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c5f3f4681-Bbol1xOb.js:1
-[   51987ms] [LOG] recaptchacompat disabled @ https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off&onload=__antClientAttestationHcaptchaInvisibleReady:3

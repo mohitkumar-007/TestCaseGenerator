@@ -1,5 +1,0 @@
-[     398ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: claude-ai, env: production, version: 4dff9f5116} @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c0826ec51-CDunXp37.js:1
-[    5295ms] [LOG] recaptchacompat disabled @ https://js.hcaptcha.com/1/api.js?render=explicit&recaptchacompat=off&onload=__antClientAttestationHcaptchaInvisibleReady:3
-[    9974ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://claude.ai/v1/privacy-consents?prefix=cookies.:0
-[   23589ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: app-console, env: production, version: fafb2548b66d93026b85e2a3af5ce59c1f3970ae} @ https://platform.claude.com/_next/static/chunks/31036-4cdaf7e3cfe3b561.js:48
-[   25354ms] [WARNING] [Intercom] The App ID in your code snippet has not been set. Set it to your App ID found in settings to complete installation: https://app.intercom.com/a/apps/_/settings/web @ https://js.intercomcdn.com/frame-modern.45c8cbfc.js:0

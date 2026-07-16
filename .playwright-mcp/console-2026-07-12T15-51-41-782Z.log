@@ -1,2 +1,0 @@
-[     324ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: claude-ai, env: production, version: 4dff9f5116} @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c0826ec51-CDunXp37.js:1
-[    3748ms] [WARNING] Deprecated API for given entry type. @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c0826ec51-CDunXp37.js:2
