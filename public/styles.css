@@ -791,23 +791,49 @@ body {
   gap: 12px;
 }
 
-.typing-dots {
+.typing-progress {
   display: inline-flex;
-  gap: 4px;
-  padding: 12px 14px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  background: none;
+  border: none;
 }
-.typing-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-  animation: typingBounce 1.2s infinite ease-in-out;
+.typing-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(135deg, #1a2233, #3d4966);
+  border-radius: 8px;
+  font-size: 13px;
+  flex-shrink: 0;
+  animation: typingLogoFly 1.8s infinite ease-in-out;
 }
-.typing-dots span:nth-child(2) {
-  animation-delay: 0.15s;
+.typing-text {
+  font-family: var(--font-sans);
+  font-size: 0.925rem;
+  font-weight: 500;
+  background: linear-gradient(
+    90deg,
+    var(--color-text-muted) 0%,
+    var(--color-text-muted) 35%,
+    var(--color-text, #1a2233) 50%,
+    var(--color-text-muted) 65%,
+    var(--color-text-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: typingTextShimmer 2s linear infinite;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  display: inline-block;
 }
-.typing-dots span:nth-child(3) {
-  animation-delay: 0.3s;
+.typing-text-swap {
+  opacity: 0;
+  transform: translateY(3px);
 }
 
 .stop-btn {
@@ -865,19 +891,31 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
+
+@keyframes typingLogoFly {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-7px) rotate(-10deg);
+  }
+  50% {
+    transform: translateY(0) rotate(0deg);
+  }
+  75% {
+    transform: translateY(5px) rotate(8deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
   }
 }
 
-@keyframes typingBounce {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.5;
+@keyframes typingTextShimmer {
+  0% {
+    background-position: 200% 0;
   }
-  30% {
-    transform: translateY(-4px);
-    opacity: 1;
+  100% {
+    background-position: -200% 0;
   }
 }
 

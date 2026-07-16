@@ -48,6 +48,7 @@
     lastRequest: null,
     abortController: null,
     jiraTicket: null,
+    typingTextTimer: null,
   };
 
   // Single constant so renaming the assistant later is a one-line change.
@@ -1001,12 +1002,53 @@
     return el;
   }
 
+  const TYPING_PHRASES = [
+    "Sit relax, generation is in progress",
+    "Piloting your test cases",
+    "On it",
+    "Charting the test flow",
+    "Generating soon",
+    "Some more time please",
+    "Taxiing to takeoff",
+    "Almost there",
+    "Analysing the requirements",
+    "Don't go anywhere, just a moment",
+    "Cleared for takeoff, building your test suite...",
+    "Cruising altitude reached, mapping test scenarios...",
+    "Navigating through the edge cases...",
+    "Flight path confirmed, drafting test steps...",
+    "Preparing for landing, finalizing your test cases...",
+    "Connecting the dots between requirements...",
+    "Brainstorming edge cases...",
+    "Compiling your test scenarios...",
+    "Structuring the test suite...",
+    "Scanning logic for potential bugs...",
+    "Synthesizing test steps and expected results...",
+    "Validating test coverage...",
+    "Grab a sip of coffee, we're doing the heavy lifting...",
+    "Working our magic, just a few seconds more...",
+    "Putting the finishing touches on your test cases...",
+    "Hang tight, weaving your test cases together...",
+    "Doing the busywork so you don't have to...",
+    "Almost done! Just dotting the i's and crossing the t's...",
+    "Crunching the requirements...",
+    "Drafting test steps...",
+    "Brewing test cases...",
+    "Brewing test cases...",
+    "Thinking...",
+    "Connecting...",
+    "Validating logic..."
+  ];
+
   function showTypingIndicator() {
     const el = document.createElement("div");
     el.className = "message message-assistant message-typing";
     el.id = "typing-indicator";
     el.innerHTML =
-      '<div class="message-bubble typing-dots"><span></span><span></span><span></span></div>' +
+      '<div class="typing-progress">' +
+        '<span class="typing-logo" aria-hidden="true">&#9992;&#65039;</span>' +
+        '<span class="typing-text" id="typing-text">' + TYPING_PHRASES[0] + '&hellip;</span>' +
+      '</div>' +
       '<button type="button" class="stop-btn" id="stop-btn" aria-label="Stop generating" title="Stop generating">&#9209;</button>';
     elements.chatMessages.appendChild(el);
     scrollToBottom();
@@ -1020,9 +1062,27 @@
         }
       });
     }
+
+    // Cycle through phrases so the indicator never looks stuck on one message
+    let phraseIndex = 0;
+    if (state.typingTextTimer) clearInterval(state.typingTextTimer);
+    state.typingTextTimer = setInterval(function () {
+      const textEl = document.getElementById("typing-text");
+      if (!textEl) return;
+      phraseIndex = (phraseIndex + 1) % TYPING_PHRASES.length;
+      textEl.classList.add("typing-text-swap");
+      setTimeout(function () {
+        textEl.textContent = TYPING_PHRASES[phraseIndex] + "…";
+        textEl.classList.remove("typing-text-swap");
+      }, 220);
+    }, 2200);
   }
 
   function hideTypingIndicator() {
+    if (state.typingTextTimer) {
+      clearInterval(state.typingTextTimer);
+      state.typingTextTimer = null;
+    }
     const el = document.getElementById("typing-indicator");
     if (el) el.remove();
   }
